@@ -1,0 +1,5 @@
+streamlit
+numpy
+pandas
+torch  # PyTorchを使用する場合
+tensorflow  # TensorFlowを使用する場合
