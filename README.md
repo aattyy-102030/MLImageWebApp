@@ -4,7 +4,7 @@
 
 ## 技術スタック
 - 言語 : Python
-- フレームワーク : Flask（Webサーバー用）, TensorFlowやPyTorch（深層学習用）
+- フレームワーク : Streamlit（Webサーバー用）, TensorFlow・Keras（深層学習用）
 - インフラ : AWS EC2（アプリケーションサーバー）、S3（画像データストレージ）
 - コンテナ : Docker（アプリケーションのデプロイと管理）
 
