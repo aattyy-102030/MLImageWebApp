@@ -3,6 +3,7 @@ from PIL import Image, ImageDraw, ImageFont # Pillowライブラリを使用
 import io
 import requests
 import json
+import boto3
 
 # --- ページ設定 ---
 st.set_page_config(
