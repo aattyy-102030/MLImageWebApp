@@ -10,6 +10,9 @@ __pycache__/
 PIL/
 pillow-11.2.1.dist-info/
 
+# Streamlit secrets file (never commit!)
+.streamlit/secrets.toml
+
 # Distribution / packaging
 .Python
 build/
