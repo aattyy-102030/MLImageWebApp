@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# tmp directories
+PIL/
+pillow-11.2.1.dist-info
+
 # Distribution / packaging
 .Python
 build/
