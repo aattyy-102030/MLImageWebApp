@@ -17,17 +17,17 @@ st.title("画像アップロード＆分析アプリ")
 uploaded_file = st.file_uploader("画像をアップロード", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    st.write(f"**--- アップロードファイル情報（Streamlit） ---**")
-    st.write(f"ファイル名: {uploaded_file.name}")
-    st.write(f"ファイルタイプ: {uploaded_file.type}")
-    st.write(f"Streamlitが認識したファイルサイズ: {uploaded_file.size} bytes") # Streamlitが提供するファイルサイズ属性
+    # st.write(f"**--- アップロードファイル情報（Streamlit） ---**")
+    # st.write(f"ファイル名: {uploaded_file.name}")
+    # st.write(f"ファイルタイプ: {uploaded_file.type}")
+    # st.write(f"Streamlitが認識したファイルサイズ: {uploaded_file.size} bytes") # Streamlitが提供するファイルサイズ属性
 
     # uploaded_file オブジェクトのポインタを先頭にリセット (念のため)
     uploaded_file.seek(0)
     # ファイルの全コンテンツを一度に読み込む
     file_bytes = uploaded_file.read()
 
-    st.write(f"メモリに読み込んだバイト配列の長さ: {len(file_bytes)} bytes") # len() で実際に読み込んだバイト数を確認
+    # st.write(f"メモリに読み込んだバイト配列の長さ: {len(file_bytes)} bytes") # len() で実際に読み込んだバイト数を確認
 
     # PILでの表示用とS3アップロード用に、それぞれ新しいBytesIOストリームを作成
     image_stream_for_pil = io.BytesIO(file_bytes)
@@ -39,7 +39,7 @@ if uploaded_file is not None:
     try:
         image = Image.open(image_stream_for_pil)
         st.image(image, caption="アップロードされた画像", use_column_width=True)
-        st.write(f"PIL Image loaded: Format={image.format}, Size={image.size}, Mode={image.mode}")
+        # st.write(f"PIL Image loaded: Format={image.format}, Size={image.size}, Mode={image.mode}")
     except Exception as e:
         st.error(f"**エラー: PILでの画像表示に失敗しました。ファイルが破損している可能性があります。**")
         st.exception(e) # 例外の詳細も表示
@@ -65,9 +65,9 @@ if uploaded_file is not None:
 
                 s3_client.upload_fileobj(image_stream_for_s3, S3_UPLOAD_BUCKET_NAME, s3_key)
                 st.success(f"画像をS3にアップロードしました: s3://{S3_UPLOAD_BUCKET_NAME}/{s3_key}")
-                st.write(f"**--- S3アップロード情報 ---**")
-                st.write(f"S3パス: s3://{S3_UPLOAD_BUCKET_NAME}/{s3_key}")
-                st.write(f"S3コンソールでこのファイルを確認してください。ファイルサイズが元のファイルと一致していますか？")
+                # st.write(f"**--- S3アップロード情報 ---**")
+                # st.write(f"S3パス: s3://{S3_UPLOAD_BUCKET_NAME}/{s3_key}")
+                # st.write(f"S3コンソールでこのファイルを確認してください。ファイルサイズが元のファイルと一致していますか？")
 
                 # --- Lambda関数を呼び出す ---
                 payload = {
@@ -79,16 +79,16 @@ if uploaded_file is not None:
                 response = requests.post(LAMBDA_API_ENDPOINT, data=json.dumps(payload), headers=headers)
 
                 # Lambdaからの生のレスポンス (デバッグ用)
-                st.write("--- Lambda Response (Raw) ---")
-                st.write(f"Status Code: {response.status_code}")
-                st.write(f"Headers: {response.headers}")
-                st.write(f"Body (Text): {response.text}")
-                st.write("---------------------------")
+                # st.write("--- Lambda Response (Raw) ---")
+                # st.write(f"Status Code: {response.status_code}")
+                # st.write(f"Headers: {response.headers}")
+                # st.write(f"Body (Text): {response.text}")
+                # st.write("---------------------------")
 
                 lambda_response_data = {}
                 try:
                     lambda_response_data = response.json()
-                    st.write("Parsed JSON Response:", lambda_response_data)
+                    # st.write("Parsed JSON Response:", lambda_response_data)
                 except json.JSONDecodeError:
                     st.error("Lambda response was not valid JSON.")
                     st.write(f"Raw response text: {response.text}")
