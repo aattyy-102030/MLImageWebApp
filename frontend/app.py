@@ -59,20 +59,51 @@ if uploaded_file is not None:
             headers = {'Content-Type': 'application/json'}
 
             response = requests.post(LAMBDA_API_ENDPOINT, data=json.dumps(payload), headers=headers)
-            response.raise_for_status() # HTTPエラーが発生した場合に例外を発生させる
+            # response.raise_for_status() # HTTPエラーが発生した場合に例外を発生させる
 
-            lambda_response = response.json()
-            # Lambdaの戻り値は 'body' の中にJSON文字列として入っているので、さらにパース
-            inference_results = json.loads(lambda_response.get('body', '{}'))
+            st.write("--- Lambda Response (Raw) ---")
+            st.write(f"Status Code: {response.status_code}")
+            st.write(f"Headers: {response.headers}")
+            st.write(f"Body (Text): {response.text}")
+            st.write("---------------------------")
+
+            # LambdaのレスポンスがJSONであることを期待してパースを試みる
+            # ただし、エラーの場合も考慮しtry-exceptで囲む
+            lambda_response_data = {}
+            try:
+                lambda_response_data = response.json()
+                st.write("Parsed JSON Response:", lambda_response_data)
+            except json.JSONDecodeError:
+                st.error("Lambda response was not valid JSON.")
+                st.write(f"Raw response text: {response.text}")
+
+            # ここから元の処理に戻す（Lambdaの戻り値は 'body' の中にJSON文字列として入っているはず）
+            inference_results = {}
+            if 'body' in lambda_response_data and isinstance(lambda_response_data['body'], str):
+                try:
+                    inference_results = json.loads(lambda_response_data['body'])
+                    st.write("Parsed Inference Results:", inference_results)
+                except json.JSONDecodeError:
+                    st.error("Lambda response body was not valid JSON string.")
+                    inference_results = {}
+            elif 'body' in lambda_response_data: # bodyが文字列ではない場合
+                st.error("Lambda response 'body' was not a string. It might be already parsed or invalid.")
+                inference_results = lambda_response_data.get('body', {}) # そのまま試すか、空にする
 
             # 推論結果を抽出 (lambda_function.pyの 'detections' キーに合わせる)
-            detections = inference_results.get('detections', [])
+            detections = inference_results.get('detections', []) # デフォルト値を空リストに
 
-            st.success("Lambda関数による分析が完了しました！")
+            if response.status_code == 200:
+                st.success("Lambda関数による分析が完了しました！")
+            else:
+                st.error(f"Lambda関数でエラーが発生しました (Status: {response.status_code}): {lambda_response_data.get('body', 'No error message from Lambda')}")
+                # エラー時の検出なしとする
+                detections = []
 
         except requests.exceptions.RequestException as e:
             st.error(f"Lambda関数の呼び出し中にエラーが発生しました: {e}")
             detections = [] # エラー時は検出なしとする
+
         except Exception as e:
             st.error(f"S3アップロードまたは処理中に予期せぬエラーが発生しました: {e}")
             detections = []
