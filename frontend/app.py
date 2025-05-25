@@ -1,162 +1,124 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont # Pillowライブラリを使用
-import io
-import requests
-import json
+from PIL import Image
 import boto3
+import json
 import uuid
+import io
+import requests # requestsモジュールをインポート
 
-# --- ページ設定 ---
-st.set_page_config(
-    page_title="画像判定Webアプリ (プロトタイプ)",
-    page_icon="📸",
-    layout="centered" # wide にすると表示領域が広くなります
-)
-
-st.title("📸 AI画像判定Webアプリ")
-st.markdown("---")
-
-st.write("画像をアップロードしてください。アップロード後、AIが画像を分析し、検出されたオブジェクトをハイライト表示します。")
-
-
-# ★★★ ここをあなたのAPI GatewayエンドポイントURLに置き換えてください ★★★
-# 例: "https://abcdef123.execute-api.ap-northeast-1.amazonaws.com/default/ImageInferenceFunction"
+# --- 定数（環境に合わせて設定） ---
+S3_UPLOAD_BUCKET_NAME = "ytm-ml-image-web-app"
 LAMBDA_API_ENDPOINT = "https://z32qp2picj.execute-api.ap-northeast-1.amazonaws.com/default/ImageInferenceFunction"
 
-# ★★★ ここをあなたのS3バケット名に置き換えてください ★★★
-S3_UPLOAD_BUCKET_NAME = "ytm-ml-image-web-app"
-
+st.set_page_config(layout="wide")
+st.title("画像アップロード＆分析アプリ")
 
 # --- 画像アップロードセクション ---
 uploaded_file = st.file_uploader("画像をアップロード", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # --- ここを修正 ---
-    # 1. uploaded_file の内容を一度すべて読み込む
+    st.write(f"**--- アップロードファイル情報（Streamlit） ---**")
+    st.write(f"ファイル名: {uploaded_file.name}")
+    st.write(f"ファイルタイプ: {uploaded_file.type}")
+    st.write(f"Streamlitが認識したファイルサイズ: {uploaded_file.size} bytes") # Streamlitが提供するファイルサイズ属性
+
+    # uploaded_file オブジェクトのポインタを先頭にリセット (念のため)
+    uploaded_file.seek(0)
+    # ファイルの全コンテンツを一度に読み込む
     file_bytes = uploaded_file.read()
 
-    # 2. BytesIO オブジェクトを作成し、画像データとS3アップロードに再利用する
-    image_stream_for_pil = io.BytesIO(file_bytes)
-    image_stream_for_s3 = io.BytesIO(file_bytes) # S3アップロード用に別のストリームを作成（またはseek(0)でも良い）
+    st.write(f"メモリに読み込んだバイト配列の長さ: {len(file_bytes)} bytes") # len() で実際に読み込んだバイト数を確認
 
-    # 画像をPIL Imageとして読み込み (BytesIOから)
-    image = Image.open(image_stream_for_pil) # PILはここから読み込む
-    st.image(image, caption="アップロードされた画像", use_column_width=True)
+    # PILでの表示用とS3アップロード用に、それぞれ新しいBytesIOストリームを作成
+    image_stream_for_pil = io.BytesIO(file_bytes)
+    image_stream_for_s3 = io.BytesIO(file_bytes)
+
+    # 画像をPIL Imageとして読み込み、Streamlitに表示
+    # ここで失敗する場合は、既に読み込み段階で問題がある可能性が高い
+    image = None # 初期化
+    try:
+        image = Image.open(image_stream_for_pil)
+        st.image(image, caption="アップロードされた画像", use_column_width=True)
+        st.write(f"PIL Image loaded: Format={image.format}, Size={image.size}, Mode={image.mode}")
+    except Exception as e:
+        st.error(f"**エラー: PILでの画像表示に失敗しました。ファイルが破損している可能性があります。**")
+        st.exception(e) # 例外の詳細も表示
+        st.info("S3へのアップロード前に、すでにファイルがPILで開けない状態です。")
+        image = None # エラーが発生したらimageをNoneにする
+
     st.write("") # スペース
 
     # プログレスバーの表示
-    with st.spinner("画像をS3にアップロードし、分析中..."):
-        try:
-            # --- 画像をS3にアップロード ---
-            s3_client = boto3.client('s3',
-                                    aws_access_key_id=st.secrets["aws_access_key_id"],
-                                    aws_secret_access_key=st.secrets["aws_secret_access_key"])
-
-            # S3に保存するファイル名（例: UUID + 拡張子など、一意になるように）
-            file_extension = uploaded_file.name.split('.')[-1]
-            s3_key = f"uploads/{uuid.uuid4()}.{file_extension}"
-
-            s3_client.upload_fileobj(uploaded_file, S3_UPLOAD_BUCKET_NAME, s3_key)
-            st.success(f"画像をS3にアップロードしました: s3://{S3_UPLOAD_BUCKET_NAME}/{s3_key}")
-
-            # --- Lambda関数を呼び出す ---
-            payload = {
-                "bucket": S3_UPLOAD_BUCKET_NAME,
-                "key": s3_key
-            }
-            headers = {'Content-Type': 'application/json'}
-
-            response = requests.post(LAMBDA_API_ENDPOINT, data=json.dumps(payload), headers=headers)
-            # response.raise_for_status() # HTTPエラーが発生した場合に例外を発生させる
-
-            st.write("--- Lambda Response (Raw) ---")
-            st.write(f"Status Code: {response.status_code}")
-            st.write(f"Headers: {response.headers}")
-            st.write(f"Body (Text): {response.text}")
-            st.write("---------------------------")
-
-            # LambdaのレスポンスがJSONであることを期待してパースを試みる
-            # ただし、エラーの場合も考慮しtry-exceptで囲む
-            lambda_response_data = {}
+    if image is not None: # PILで画像が正常に読み込めた場合のみS3アップロードと分析に進む
+        with st.spinner("画像をS3にアップロードし、分析中..."):
             try:
-                lambda_response_data = response.json()
-                st.write("Parsed JSON Response:", lambda_response_data)
-            except json.JSONDecodeError:
-                st.error("Lambda response was not valid JSON.")
-                st.write(f"Raw response text: {response.text}")
+                # --- 画像をS3にアップロード ---
+                s3_client = boto3.client('s3',
+                                        aws_access_key_id=st.secrets["aws_access_key_id"],
+                                        aws_secret_access_key=st.secrets["aws_secret_access_key"])
 
-            # ここから元の処理に戻す（Lambdaの戻り値は 'body' の中にJSON文字列として入っているはず）
-            inference_results = {}
-            if 'body' in lambda_response_data and isinstance(lambda_response_data['body'], str):
+                file_extension = uploaded_file.name.split('.')[-1]
+                s3_key = f"uploads/{uuid.uuid4()}.{file_extension}"
+
+                # S3アップロード用のストリームのポインタを先頭にリセット (念のため)
+                image_stream_for_s3.seek(0)
+
+                s3_client.upload_fileobj(image_stream_for_s3, S3_UPLOAD_BUCKET_NAME, s3_key)
+                st.success(f"画像をS3にアップロードしました: s3://{S3_UPLOAD_BUCKET_NAME}/{s3_key}")
+                st.write(f"**--- S3アップロード情報 ---**")
+                st.write(f"S3パス: s3://{S3_UPLOAD_BUCKET_NAME}/{s3_key}")
+                st.write(f"S3コンソールでこのファイルを確認してください。ファイルサイズが元のファイルと一致していますか？")
+
+                # --- Lambda関数を呼び出す ---
+                payload = {
+                    "bucket": S3_UPLOAD_BUCKET_NAME,
+                    "key": s3_key
+                }
+                headers = {'Content-Type': 'application/json'}
+
+                response = requests.post(LAMBDA_API_ENDPOINT, data=json.dumps(payload), headers=headers)
+
+                # Lambdaからの生のレスポンス (デバッグ用)
+                st.write("--- Lambda Response (Raw) ---")
+                st.write(f"Status Code: {response.status_code}")
+                st.write(f"Headers: {response.headers}")
+                st.write(f"Body (Text): {response.text}")
+                st.write("---------------------------")
+
+                lambda_response_data = {}
                 try:
-                    inference_results = json.loads(lambda_response_data['body'])
-                    st.write("Parsed Inference Results:", inference_results)
+                    lambda_response_data = response.json()
+                    st.write("Parsed JSON Response:", lambda_response_data)
                 except json.JSONDecodeError:
-                    st.error("Lambda response body was not valid JSON string.")
-                    inference_results = {}
-            elif 'body' in lambda_response_data: # bodyが文字列ではない場合
-                st.error("Lambda response 'body' was not a string. It might be already parsed or invalid.")
-                inference_results = lambda_response_data.get('body', {}) # そのまま試すか、空にする
+                    st.error("Lambda response was not valid JSON.")
+                    st.write(f"Raw response text: {response.text}")
 
-            # 推論結果を抽出 (lambda_function.pyの 'detections' キーに合わせる)
-            detections = inference_results.get('detections', []) # デフォルト値を空リストに
+                inference_results = {}
+                if 'body' in lambda_response_data and isinstance(lambda_response_data['body'], str):
+                    try:
+                        inference_results = json.loads(lambda_response_data['body'])
+                        st.write("Parsed Inference Results:", inference_results)
+                    except json.JSONDecodeError:
+                        st.error("Lambda response body was not valid JSON string.")
+                        inference_results = {}
+                elif 'body' in lambda_response_data:
+                    st.error("Lambda response 'body' was not a string. It might be already parsed or invalid.")
+                    inference_results = lambda_response_data.get('body', {})
 
-            if response.status_code == 200:
-                st.success("Lambda関数による分析が完了しました！")
-            else:
-                st.error(f"Lambda関数でエラーが発生しました (Status: {response.status_code}): {lambda_response_data.get('body', 'No error message from Lambda')}")
-                # エラー時の検出なしとする
+                detections = inference_results.get('detections', [])
+
+                if response.status_code == 200:
+                    st.success("Lambda関数による分析が完了しました！")
+                    st.write("分析結果:", detections)
+                else:
+                    st.error(f"Lambda関数でエラーが発生しました (Status: {response.status_code}): {lambda_response_data.get('body', 'No error message from Lambda')}")
+                    detections = []
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"Lambda関数の呼び出し中にエラーが発生しました: {e}")
                 detections = []
-
-        except requests.exceptions.RequestException as e:
-            st.error(f"Lambda関数の呼び出し中にエラーが発生しました: {e}")
-            detections = [] # エラー時は検出なしとする
-
-        except Exception as e:
-            st.error(f"S3アップロードまたは処理中に予期せぬエラーが発生しました: {e}")
-            detections = []
-
-    # --- 検出結果を描画 ---
-    draw = ImageDraw.Draw(image)
-    try:
-        font = ImageFont.truetype("arial.ttf", 20)
-    except IOError:
-        font = ImageFont.load_default()
-
-    detected_objects_summary = []
-    if detections:
-        for det in detections: # Lambdaからの結果を使用
-            x1, y1, x2, y2 = det['box']
-            label = det['label']
-            score = det['score']
-
-            draw.rectangle([x1, y1, x2, y2], outline="red", width=3)
-
-            text_to_display = f"{label} ({score:.2f})"
-            text_bbox = draw.textbbox((x1, y1), text_to_display, font=font)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
-
-            draw.rectangle([x1, y1 - text_height - 5, x1 + text_width, y1], fill="red")
-            draw.text((x1, y1 - text_height - 5), text_to_display, fill="white", font=font)
-
-            detected_objects_summary.append(f"- {label} (信頼度: {score:.2f})")
-
-        st.subheader("分析結果")
-        st.image(image, caption="分析結果 (バウンディングボックス)", use_column_width=True)
-        st.write("検出されたオブジェクト:")
-        for obj in detected_objects_summary:
-            st.write(obj)
-    else:
-        st.write("画像からオブジェクトは検出されませんでした。")
-        if not detections and uploaded_file is not None:
-            st.info("※エラーメッセージが表示されていない場合、これはLambdaから検出結果が0件と返されたことを意味します。")
-
-
-    st.markdown("---")
-    # st.success("分析が完了しました！") # 既に上に移動したのでコメントアウト
-
-else:
-    st.info("↑画像をアップロードして開始してください。")
-
-st.markdown("ご質問やフィードバックがあれば、お気軽にお寄せください。")
+            except Exception as e:
+                st.error(f"予期せぬエラーが発生しました: {e}")
+                detections = []
+    else: # if image is None due to PIL error during local display attempt
+        st.error("アップロードされた画像の読み込みに失敗したため、S3へのアップロードとLambda分析はスキップされました。")
