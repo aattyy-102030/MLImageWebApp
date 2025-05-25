@@ -4,6 +4,7 @@ import io
 import requests
 import json
 import boto3
+import uuid
 
 # --- ページ設定 ---
 st.set_page_config(
@@ -30,8 +31,16 @@ S3_UPLOAD_BUCKET_NAME = "ytm-ml-image-web-app"
 uploaded_file = st.file_uploader("画像をアップロード", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # 画像をPIL Imageとして読み込み
-    image = Image.open(uploaded_file)
+    # --- ここを修正 ---
+    # 1. uploaded_file の内容を一度すべて読み込む
+    file_bytes = uploaded_file.read()
+
+    # 2. BytesIO オブジェクトを作成し、画像データとS3アップロードに再利用する
+    image_stream_for_pil = io.BytesIO(file_bytes)
+    image_stream_for_s3 = io.BytesIO(file_bytes) # S3アップロード用に別のストリームを作成（またはseek(0)でも良い）
+
+    # 画像をPIL Imageとして読み込み (BytesIOから)
+    image = Image.open(image_stream_for_pil) # PILはここから読み込む
     st.image(image, caption="アップロードされた画像", use_column_width=True)
     st.write("") # スペース
 
@@ -44,7 +53,6 @@ if uploaded_file is not None:
                                     aws_secret_access_key=st.secrets["aws_secret_access_key"])
 
             # S3に保存するファイル名（例: UUID + 拡張子など、一意になるように）
-            import uuid
             file_extension = uploaded_file.name.split('.')[-1]
             s3_key = f"uploads/{uuid.uuid4()}.{file_extension}"
 
