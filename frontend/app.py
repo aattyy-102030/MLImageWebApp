@@ -17,10 +17,10 @@ st.title("画像アップロード＆分析アプリ")
 uploaded_file = st.file_uploader("画像をアップロード", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # st.write(f"**--- アップロードファイル情報（Streamlit） ---**")
-    # st.write(f"ファイル名: {uploaded_file.name}")
-    # st.write(f"ファイルタイプ: {uploaded_file.type}")
-    # st.write(f"Streamlitが認識したファイルサイズ: {uploaded_file.size} bytes") # Streamlitが提供するファイルサイズ属性
+    st.write(f"**--- アップロードファイル情報（Streamlit） ---**")
+    st.write(f"ファイル名: {uploaded_file.name}")
+    st.write(f"ファイルタイプ: {uploaded_file.type}")
+    st.write(f"Streamlitが認識したファイルサイズ: {uploaded_file.size} bytes") # Streamlitが提供するファイルサイズ属性
 
     # uploaded_file オブジェクトのポインタを先頭にリセット (念のため)
     uploaded_file.seek(0)
@@ -79,11 +79,11 @@ if uploaded_file is not None:
                 response = requests.post(LAMBDA_API_ENDPOINT, data=json.dumps(payload), headers=headers)
 
                 # Lambdaからの生のレスポンス (デバッグ用)
-                # st.write("--- Lambda Response (Raw) ---")
-                # st.write(f"Status Code: {response.status_code}")
-                # st.write(f"Headers: {response.headers}")
-                # st.write(f"Body (Text): {response.text}")
-                # st.write("---------------------------")
+                st.write("--- Lambda Response (Raw) ---")
+                st.write(f"Status Code: {response.status_code}")
+                st.write(f"Headers: {response.headers}")
+                st.write(f"Body (Text): {response.text}")
+                st.write("---------------------------")
 
                 lambda_response_data = {}
                 try:
